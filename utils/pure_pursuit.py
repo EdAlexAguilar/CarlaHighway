@@ -21,7 +21,10 @@ class PurePursuit():
         self.min_num_waypoints = min_num_waypoints  # gets new waypoints if below this number
         self.kv = kv
         self.kc = kc
+        self.original_target = target_speed
         self.target_speed = target_speed
+        self.frame_counter = 0
+        self.lane_change_every = 125 + np.random.randint(50)
         self.half_length = vehicle.bounding_box.extent.x  - 0.5 # half the vehicle's length correction to put in axle
         self.speed_controller = PID(kp=speed_kp, kd=speed_kd, ki=speed_ki, base_control=0.45)
         self.delta_mul = delta_mul
@@ -79,6 +82,9 @@ class PurePursuit():
         return delta
 
     def update(self):
+        self.frame_counter += 1
+        if self.frame_counter % self.lane_change_every == 0:
+            self.change_lane(np.random.randint(3) - 1)
         control_command = carla.VehicleControl()
         control_command.throttle = self.longitudinal_control()
         control_command.steer = self.lateral_control()
