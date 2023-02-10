@@ -9,6 +9,5 @@ class TrafficManager:
 
     def update_all(self):
         for actor, control in zip(self.actors, self.controllers):
-            
             control.update()
 

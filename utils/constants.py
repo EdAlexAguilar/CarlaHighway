@@ -14,3 +14,6 @@ npcInfo = namedtuple('npcInfo', ['model', # carla model name, velocity type
 vehicles = {"mercedes.coupe_2020": npcInfo("mercedes.coupe_2020",
                                             0.4, 0.0, 0.1,
                                             1.2, 0.5)}
+IMG_DIM = 640
+base_vehicle_config ={ "image_source": "rgb_camera",
+                        "rgb_camera": (IMG_DIM, IMG_DIM)}
