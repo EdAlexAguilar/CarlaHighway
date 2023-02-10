@@ -9,9 +9,9 @@ def next_n_items(item_list, start_id, n):
 
 
 class NavigationWaypoints:
-    def __init__(self, carla_map, road_list, lane_list, waypoint_dist=1):
+    def __init__(self, carla_map, road_list, lane_list, waypoint_dist=0.5):
         """
-        navigation_points is a dict per lane, holdint a list of carla.location s
+        navigation_points is a dict per lane, holding a list of carla.location
         """
         self.carla_map = carla_map
         self.road_list = road_list

@@ -46,17 +46,19 @@ def spectator_camera_transform(actor):
     camera_rotation = carla.Rotation(pitch-15, yaw, roll)
     return carla.Transform(camera_location, camera_rotation)
 
-def spawn_rgb_sensor(world, actor, resolution=1280, height_offset=0.2, pitch=-15, filepath=IMG_FILEPATH):
+def spawn_rgb_sensor(world, actor, resolution=(1280,1280), height_offset=0.2, pitch=-15, filepath=IMG_FILEPATH):
     """
     Camera is located *ON TOP* of vehicle (5/8 of the way to the front)
     (for cars with long hoods, this might be in an unrealistic place)
     :param actor: carla (ego) vehicle
-    :param resolution: Returns square image of this size
+    :param resolution: tuple (res_x, res_y)
     :return: camera actor
     """
+    global frame_counter
+    frame_counter = -1
     blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
-    blueprint.set_attribute('image_size_x', str(resolution))
-    blueprint.set_attribute('image_size_y', str(resolution))
+    blueprint.set_attribute('image_size_x', str(resolution[0]))
+    blueprint.set_attribute('image_size_y', str(resolution[1]))
     height = 2 * actor.bounding_box.extent.z
     length = 2 * actor.bounding_box.extent.x
     camera_transform = carla.Transform(carla.Location(length/8, 0, height + height_offset),
