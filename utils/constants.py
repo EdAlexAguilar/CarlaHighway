@@ -13,7 +13,29 @@ npcInfo = namedtuple('npcInfo', ['model', # carla model name, velocity type
 
 vehicles = {"mercedes.coupe_2020": npcInfo("mercedes.coupe_2020",
                                             0.4, 0.0, 0.1,
-                                            1.2, 0.5)}
+                                            1.2, 0.5),
+            "audi.tt": npcInfo("audi.tt",
+                               0.4, 0.0, 0.1,
+                               1.2, 0.5),
+            "citroen.c3": npcInfo("citroen.c3",
+                                    0.4, 0.0, 0.1,
+                                    1.2, 0.5),
+            "dodge.charger_2020": npcInfo("dodge.charger_2020",
+                                           0.4, 0.0, 0.1,
+                                           1.2, 0.5),
+            "ford.mustang": npcInfo("ford.mustang",
+                                    0.4, 0.0, 0.1,
+                                    1.2, 0.5),
+            "jeep.wrangler_rubicon": npcInfo("jeep.wrangler_rubicon",
+                                               0.4, 0.0, 0.1,
+                                               1.2, 0.5),
+            "lincoln.mkz_2020": npcInfo("lincoln.mkz_2020",
+                                        0.4, 0.0, 0.1,
+                                        1.2, 0.5),
+            "nissan.patrol_2021": npcInfo("nissan.patrol_2021",
+                                           0.4, 0.0, 0.1,
+                                           1.2, 0.5),
+            }
 IMG_DIM = 640
 base_vehicle_config ={ "image_source": "rgb_camera",
                         "rgb_camera": (IMG_DIM, IMG_DIM)}

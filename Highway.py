@@ -65,7 +65,7 @@ def spawn_controllers(actors, target_speed):
         controllers.append(control)
     return controllers
 
-def new_random_waypoint(waypoint, min_offset=1, rand_offset=10, same_lane_offset=5):
+def new_random_waypoint(waypoint, min_offset=2, rand_offset=10, same_lane_offset=6):
     new_lane = np.random.choice(CONST.TRACK_LANES)
     new_wp = waypoint.next(min_offset + rand_offset*np.random.rand())[0]
     if new_lane == waypoint.lane_id:

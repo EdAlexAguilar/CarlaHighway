@@ -24,7 +24,7 @@ class PurePursuit():
         self.original_target = target_speed
         self.target_speed = target_speed
         self.frame_counter = 0
-        self.lane_change_every = 125 + np.random.randint(50)
+        self.lane_change_every = 1025 + np.random.randint(50)
         self.half_length = vehicle.bounding_box.extent.x  - 0.5 # half the vehicle's length correction to put in axle
         self.speed_controller = PID(kp=speed_kp, kd=speed_kd, ki=speed_ki, base_control=0.45)
         self.delta_mul = delta_mul
@@ -72,9 +72,11 @@ class PurePursuit():
         delta *= self.delta_mul
 
         if len(self.waypoints) < self.min_num_waypoints:
-            self.waypoints = self.navpoints.get_new_points(self.vehicle.get_location(),
-                                                           self.carla_map.get_waypoint(self.vehicle.get_location()).lane_id,
-                                                           num=500)
+            lane = self.carla_map.get_waypoint(self.vehicle.get_location()).lane_id
+            if lane in self.navpoints.navigation_points.keys():
+                self.waypoints = self.navpoints.get_new_points(self.vehicle.get_location(),
+                                                               lane,
+                                                               num=500)
 
         # closest_historical = np.array([rear_axle_loc.distance(w) for w in self.historical_waypoints])
         # closest_historical = closest_historical.argmin()

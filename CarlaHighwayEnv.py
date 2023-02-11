@@ -5,11 +5,13 @@ import utils.constants as CONST
 import utils.navigation_utils as navigation_utils
 import utils.carla_utils as carla_utils
 import utils.pure_pursuit as pp
+import time
 
 class CarlaHighwayEnv(gym.Env):
     def __init__(self, traffic_speed=14,
                        traffic_density=0.15,
-                       vehicle_config=None):
+                       vehicle_config=None,
+                       max_num_steps=2000):
         self.traffic_speed = traffic_speed
         self.traffic_density = traffic_density
         self.vehicle_config = CONST.base_vehicle_config
@@ -22,17 +24,21 @@ class CarlaHighwayEnv(gym.Env):
         self.ego_model = "mercedes.coupe_2020"
         self.time_delta = 0.05
         self.waypoint_dist = 10
+        self.max_num_steps = max_num_steps  # episode ends if limit is reached
         self.connect_to_carla()
-        self.spawn_ego_and_actors()
+        _ = self.reset()
 
     def reset(self):
         self.prev_throttle = 0
         self.prev_steer = 0
         self.prev_yaw = 0
         self.reset_carla()
-        self.spawn_ego_and_actors()
-        ego_state = self.get_ego_state()
-        return ego_state
+        self.spawn_ego_and_actors() # contains world.tick()
+        self.current_frame = 0
+        carla_utils.frame_counter = 0
+        carla_utils.detected_crash = False
+        obs = self.get_ego_obs()
+        return obs
 
     def step(self, action):
         # basic control of other actors
@@ -45,6 +51,7 @@ class CarlaHighwayEnv(gym.Env):
         self.ego_vehicle.apply_control(control_command)
         # tick world and move spectator for visualization
         self.world.tick()
+        self.current_frame += 1
         self.world.get_spectator().set_transform(carla_utils.spectator_camera_transform(self.ego_vehicle))
         # update waypoints for ego
         self.ego_waypoints = self.ego_navpoints.get_new_points(self.ego_vehicle.get_location(),
@@ -52,13 +59,14 @@ class CarlaHighwayEnv(gym.Env):
                                                                    self.ego_vehicle.get_location()).lane_id,
                                                                num=3)
         # Retrieve data to send back
-        ego_state = self.get_ego_state(action)
-        done = False
-        info = {}
-        reward = 1
+        timeout = self.current_frame > self.max_num_steps
+        obs = self.get_ego_obs(action)
+        done = obs['collision'] or timeout
+        info = {'frame': self.current_frame}
+        reward = 1 if not obs['collision'] else -10
         self.prev_throttle = action[0]
         self.prev_steer = action[1]
-        return ego_state, reward, done, info
+        return obs, reward, done, info
 
     def close(self):
         self.reset_carla()
@@ -82,12 +90,30 @@ class CarlaHighwayEnv(gym.Env):
         self.carla_map = self.world.get_map()
 
     def spawn_ego_and_actors(self):
-
         self.spawn_ego()  # contains world.tick()
         self.spawn_actors()  # contains world.tick()
         self.world.get_spectator().set_transform(carla_utils.spectator_camera_transform(self.ego_vehicle))
         self.camera = carla_utils.spawn_rgb_sensor(self.world, self.ego_vehicle, self.vehicle_config['rgb_camera'])
+        self.collision_sensor = carla_utils.spawn_collision_sensor(self.world, self.ego_vehicle)
         self.world.tick() # to move the camera in place
+
+    def get_ego_obs(self, action):
+        obs = {"state" : self.get_ego_state(action)}
+        sensor_info = self.get_sensor_info()
+        obs = {**obs, **sensor_info}
+        return obs
+
+    def get_sensor_info(self):
+        sensor_obs = {}
+        # extract image from camera sensor
+        while self.current_frame != carla_utils.frame_counter:
+            time.sleep(0.002)
+        camera_image = carla_utils.array_output
+        sensor_obs['image'] = camera_image
+        # extract collision information
+        crash = carla_utils.detected_crash
+        sensor_obs['collision'] = crash
+        return sensor_obs
 
     def get_ego_state(self, action):
         """
@@ -149,7 +175,7 @@ class CarlaHighwayEnv(gym.Env):
         return np.array(ego_state)
 
     def spawn_actors(self):
-        def new_random_waypoint(waypoint, min_offset=1, rand_offset=10, same_lane_offset=5):
+        def new_random_waypoint(waypoint, min_offset=3, rand_offset=10, same_lane_offset=7):
             new_lane = np.random.choice(CONST.TRACK_LANES)
             new_wp = waypoint.next(min_offset + rand_offset * np.random.rand())[0]
             if new_lane == waypoint.lane_id:
