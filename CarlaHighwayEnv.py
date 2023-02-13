@@ -6,20 +6,31 @@ import utils.navigation_utils as navigation_utils
 import utils.carla_utils as carla_utils
 import utils.pure_pursuit as pp
 import time
+import cv2
 
 class CarlaHighwayEnv(gym.Env):
     def __init__(self, traffic_speed=14,
                        traffic_density=0.15,
                        vehicle_config=None,
-                       max_num_steps=2000):
+                       max_num_steps=2000,
+                       normalized_image=True,
+                       BGR=True):
         self.traffic_speed = traffic_speed
         self.traffic_density = traffic_density
         self.vehicle_config = CONST.base_vehicle_config
         if vehicle_config is not None:
             for key, value in vehicle_config.items():
                 self.vehicle_config[key] = value
-        self.observation_space = gym.spaces.Dict({"state": gym.spaces.Box(low=0.0, high=1.0, shape=(19,), dtype=np.float32),
-                                                  "image": gym.spaces.Box(low=0.0, high=1.0, shape=(self.vehicle_config["rgb_camera"][0],self.vehicle_config["rgb_camera"][1],3,1), dtype=np.float32)})
+        self.normalized_image = normalized_image
+        self.BGR = BGR
+        if normalized_image:
+            self.observation_space = gym.spaces.Dict({
+                "state": gym.spaces.Box(low=0.0, high=1.0, shape=(19,), dtype=np.float32),
+                "image": gym.spaces.Box(low=0.0, high=255.0, shape=(self.vehicle_config["rgb_camera"][0],self.vehicle_config["rgb_camera"][1],3,1), dtype=np.float32)})
+        else:
+            self.observation_space = gym.spaces.Dict(
+                {"state": gym.spaces.Box(low=0.0, high=1.0, shape=(19,), dtype=np.float32),
+                 "image": gym.spaces.Box(low=0.0, high=1.0, shape=(self.vehicle_config["rgb_camera"][0], self.vehicle_config["rgb_camera"][1], 3, 1), dtype=np.float32)})
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.candidates = CONST.vehicles  # dictionary containing possible cars to spawn for other actors
         self.ego_model = "mercedes.coupe_2020"
@@ -115,6 +126,11 @@ class CarlaHighwayEnv(gym.Env):
         while self.current_frame != carla_utils.frame_counter:
             time.sleep(0.002)
         camera_image = carla_utils.array_output
+        if self.BGR:
+            camera_image = cv2.cvtColor(np.array(camera_image, np.float32), cv2.COLOR_RGB2BGR)
+        if self.normalized_image:
+            camera_image /= 255.0
+        # added dimension in reshape, to match metadrive channel
         sensor_obs['image'] = camera_image.reshape([self.vehicle_config["rgb_camera"][0],self.vehicle_config["rgb_camera"][1],3,1])
         # extract collision information
         crash = carla_utils.detected_crash
