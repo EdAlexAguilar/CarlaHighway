@@ -2,8 +2,9 @@ import carla
 import numpy as np
 import datetime
 import cv2
+import utils.constants as CONST
 
-array_output = -1
+array_output = np.zeros([CONST.IMG_DIM, CONST.IMG_DIM, 3])
 frame_counter = -1
 IMG_FILEPATH = 'images/'
 detected_crash = False

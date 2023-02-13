@@ -18,8 +18,9 @@ class CarlaHighwayEnv(gym.Env):
         if vehicle_config is not None:
             for key, value in vehicle_config.items():
                 self.vehicle_config[key] = value
-        self.observation_space = gym.spaces.Discrete(4)
-        self.action_space = gym.spaces.Discrete(2)
+        self.observation_space = gym.spaces.Dict({"state": gym.spaces.Box(low=0.0, high=1.0, shape=(19,), dtype=np.float32),
+                                                  "image": gym.spaces.Box(low=0.0, high=1.0, shape=(self.vehicle_config["rgb_camera"][0],self.vehicle_config["rgb_camera"][1],3,1), dtype=np.float32)})
+        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         self.candidates = CONST.vehicles  # dictionary containing possible cars to spawn for other actors
         self.ego_model = "mercedes.coupe_2020"
         self.time_delta = 0.05
@@ -37,7 +38,7 @@ class CarlaHighwayEnv(gym.Env):
         self.current_frame = 0
         carla_utils.frame_counter = 0
         carla_utils.detected_crash = False
-        obs = self.get_ego_obs()
+        obs = self.get_ego_obs(np.array([0,0]))
         return obs
 
     def step(self, action):
@@ -84,10 +85,15 @@ class CarlaHighwayEnv(gym.Env):
 
     def reset_carla(self):
         """Destroys all actors and creates a new instance of world"""
-        self.client.reload_world(self, reset_settings=False)
+        self.client.reload_world(reset_settings=False)
         self.world = self.client.get_world()
         self.world.apply_settings(self.carla_settings)
         self.carla_map = self.world.get_map()
+        # kill sensors if any present
+        sensors = [x for x in self.world.get_actors() if x.type_id[:6]=='sensor']
+        for s in sensors:
+            s.destroy()
+
 
     def spawn_ego_and_actors(self):
         self.spawn_ego()  # contains world.tick()
@@ -109,7 +115,7 @@ class CarlaHighwayEnv(gym.Env):
         while self.current_frame != carla_utils.frame_counter:
             time.sleep(0.002)
         camera_image = carla_utils.array_output
-        sensor_obs['image'] = camera_image
+        sensor_obs['image'] = camera_image.reshape([self.vehicle_config["rgb_camera"][0],self.vehicle_config["rgb_camera"][1],3,1])
         # extract collision information
         crash = carla_utils.detected_crash
         sensor_obs['collision'] = crash
@@ -124,7 +130,7 @@ class CarlaHighwayEnv(gym.Env):
             x, y, z = carla_vec.x, carla_vec.y, carla_vec.z
             return np.array([x, y, z])
         # ego vehicle info
-        speed = self.vehicle.get_velocity()
+        speed = self.ego_vehicle.get_velocity()
         speed = speed.length()
         transform = self.ego_vehicle.get_transform()
         rotation = transform.rotation
@@ -132,25 +138,25 @@ class CarlaHighwayEnv(gym.Env):
         yaw = rotation.yaw
         location = vec_to_np(transform.location)
         # road info
-        road_waypoint = self.carla_map.get_waypoint(location)
+        road_waypoint = self.carla_map.get_waypoint(transform.location) # this is a waypoint projected to the centerline
         current_lane = int(road_waypoint.lane_id)
         lane_width = road_waypoint.lane_width
-        road_transform = road_waypoint.get_transform()
+        road_transform = road_waypoint.transform
         road_heading = vec_to_np(road_transform.get_forward_vector())
         road_right = vec_to_np(road_transform.get_right_vector())
         road_location = vec_to_np(road_transform.location)
         dist_vector = location - road_location
-        right_side = sign(dist_vector @ road_right)
+        right_side = np.sign(dist_vector @ road_right)
         dist_to_center = right_side * np.linalg.norm(dist_vector)
         dist_left_line = (current_lane - min(CONST.TRACK_LANES)) * lane_width + lane_width/2 + dist_to_center
         dist_right_line = (max(CONST.TRACK_LANES) - current_lane) * lane_width - lane_width/2 - dist_to_center
         diff_angular_heading_lane = right_side * np.arccos(road_heading @ heading)
         # navigation info  (Sorry for *bad* style!)
-        next_waypoint = self.ego_waypoints[1]
+        next_waypoint = vec_to_np(self.ego_waypoints[1])
         next_diff = next_waypoint - location
         lon_dist_next_wp = heading @ next_diff
         lat_dist_next_wp = next_diff - lon_dist_next_wp*heading
-        next_next_waypoint = self.ego_waypoints[2]
+        next_next_waypoint = vec_to_np(self.ego_waypoints[2])
         next_next_diff = next_next_waypoint - location
         lon_dist_next_next_wp = heading @ next_next_diff
         lat_dist_next_next_wp = next_next_diff - lon_dist_next_next_wp * heading
@@ -175,7 +181,7 @@ class CarlaHighwayEnv(gym.Env):
         return np.array(ego_state)
 
     def spawn_actors(self):
-        def new_random_waypoint(waypoint, min_offset=3, rand_offset=10, same_lane_offset=7):
+        def new_random_waypoint(waypoint, min_offset=8, rand_offset=10, same_lane_offset=7):
             new_lane = np.random.choice(CONST.TRACK_LANES)
             new_wp = waypoint.next(min_offset + rand_offset * np.random.rand())[0]
             if new_lane == waypoint.lane_id:
@@ -192,7 +198,7 @@ class CarlaHighwayEnv(gym.Env):
         for _ in range(num_actors):
             actor_model = np.random.choice(list(self.candidates.keys()))
             wp = new_random_waypoint(wp)
-            vehicle = c_utils.spawn_vehicle(self.world, wp.transform, actor_model)
+            vehicle = carla_utils.spawn_vehicle(self.world, wp.transform, actor_model)
             self.actors.append(vehicle)
         self.world.tick()  # before creating the controllers, it's necessary to world.tick()
         # -------- create controllers for actors -------------
@@ -212,7 +218,7 @@ class CarlaHighwayEnv(gym.Env):
     def spawn_ego(self):
         init_road = np.random.choice(CONST.TRACK_ROADS)
         init_lane = np.random.choice(CONST.TRACK_LANES)
-        self.ego_init_waypoint = [w for w in carla_map.generate_waypoints(5)
+        self.ego_init_waypoint = [w for w in self.carla_map.generate_waypoints(5)
                                 if w.road_id == init_road and w.lane_id == init_lane][0]
         self.ego_vehicle = carla_utils.spawn_vehicle(self.world, self.ego_init_waypoint.transform, self.ego_model)
         self.world.tick()
